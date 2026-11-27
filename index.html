@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>דפדפן מרוחק - מוטי דפדפנים בעם</title>
+<style>
+  body { margin:0; font-family:system-ui,Arial,sans-serif; background:#eef0f4; }
+  #bar { display:flex; gap:8px; padding:8px; background:#fff; border-bottom:1px solid #ddd; }
+  #bar input { flex:1; padding:8px; font-size:16px; border:1px solid #ccc; border-radius:6px; }
+  #bar button { padding:8px 18px; background:#2563eb; color:#fff; border:0; border-radius:6px; cursor:pointer; }
+  #msg { color:#b00; padding:4px 10px; min-height:1.5em; }
+  #screen { width:100%; display:block; background:#fff; cursor:pointer; outline:none; }
+</style>
+</head>
+<body>
+<form id="bar">
+  <input id="url" dir="ltr" placeholder="הקלידו כתובת, למשל https://example.com">
+  <button>גלש</button>
+</form>
+<div id="msg"></div>
+<img id="screen" tabindex="0" alt="מסך הדפדפן">
+<script>
+const img = document.getElementById('screen');
+const urlBox = document.getElementById('url');
+const msg = document.getElementById('msg');
+const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+const ws = new WebSocket(`${proto}://${location.host}/session`);
+const send = o => { if (ws.readyState === 1) ws.send(JSON.stringify(o)); };
+
+ws.onmessage = e => {
+  const m = JSON.parse(e.data);
+  if (m.type === 'frame') {
+    img.src = 'data:image/jpeg;base64,' + m.image;
+    urlBox.value = m.url;
+    msg.textContent = '';
+  } else if (m.type === 'error') {
+    msg.textContent = m.message;
+  }
+};
+ws.onclose = () => { msg.textContent = 'החיבור נסגר. רעננו את הדף כדי להתחיל מחדש.'; };
+
+document.getElementById('bar').onsubmit = e => {
+  e.preventDefault();
+  let u = urlBox.value.trim();
+  if (!/^https?:\/\//.test(u)) u = 'https://' + u;
+  send({ type: 'navigate', url: u });
+};
+
+// המרת לחיצה על התמונה לקואורדינטות של חלון 1280x800
+img.onclick = e => {
+  const r = img.getBoundingClientRect();
+  send({ type: 'click', x: (e.clientX - r.left) * 1280 / r.width, y: (e.clientY - r.top) * 800 / r.height });
+};
+
+img.addEventListener('keydown', e => {
+  e.preventDefault();
+  send(e.key.length === 1 ? { type: 'type', text: e.key } : { type: 'key', key: e.key });
+});
+
+img.addEventListener('wheel', e => {
+  e.preventDefault();
+  send({ type: 'scroll', dy: e.deltaY });
+}, { passive: false });
+</script>
+</body>
+</html>
